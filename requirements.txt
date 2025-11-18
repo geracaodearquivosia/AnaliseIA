@@ -1,0 +1,10 @@
+streamlit
+pandas
+numpy
+matplotlib
+seaborn
+python-dotenv
+openpyxl
+xlrd
+langchain
+google-generative-ai
