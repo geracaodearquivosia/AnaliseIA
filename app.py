@@ -307,19 +307,127 @@ def show_data_analysis_app():
                     st.dataframe(df.iloc[linha_inicio:linha_fim + 1], width="stretch")
 
             with tab_visualizacao:
-                st.header("Geração de Gráficos")
-                # Lógica de seleção e geração de gráficos (mantida)
-                tipo_grafico = st.selectbox(
-                    "1. Escolha o tipo de gráfico:",
-                    ["Histograma", "Gráfico de Barras", "Gráfico de Pizza",
-                        "Gráfico de Dispersão (Scatter)"]
-                )
-                st.markdown("---")
-                try:
-                    # Lógica de geração de gráficos (código completo omitido para foco no item 3)
-                    st.info(f"O gráfico de {tipo_grafico} será gerado aqui com base nas colunas selecionadas.")
-                except Exception:
-                    pass
+                st.header("Geração de Gráficos Personalizados")
+
+                # Separação de colunas por tipo para facilitar a escolha
+                numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+                categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+                all_cols = df.columns.tolist()
+
+                col1, col2 = st.columns([1, 3])
+
+                with col1:
+                    st.subheader("Configurações")
+                    tipo_grafico = st.selectbox(
+                        "Tipo de Gráfico:",
+                        ["Histograma", "Gráfico de Barras", "Boxplot", "Gráfico de Pizza", "Gráfico de Dispersão (Scatter)"]
+                    )
+
+                    # --- Lógica de Seleção de Colunas baseada no Tipo ---
+                    selected_x = None
+                    selected_y = None
+                    selected_color = None
+                    bins = 20
+                    
+                    if tipo_grafico == "Histograma":
+                        if numeric_cols:
+                            selected_x = st.selectbox("Selecione a Coluna (Numérica):", numeric_cols)
+                            bins = st.slider("Número de Bins (Intervalos):", 5, 100, 20)
+                            selected_color = st.selectbox("Agrupar por cor (Hue - Opcional):", ["(Nenhum)"] + categorical_cols)
+                        else:
+                            st.warning("Não há colunas numéricas para histograma.")
+
+                    elif tipo_grafico == "Gráfico de Barras":
+                        if categorical_cols and numeric_cols:
+                            selected_x = st.selectbox("Eixo X (Categoria):", categorical_cols)
+                            selected_y = st.selectbox("Eixo Y (Numérico - Média):", numeric_cols)
+                            selected_color = st.selectbox("Agrupar por cor (Hue - Opcional):", ["(Nenhum)"] + categorical_cols)
+                        else:
+                            st.warning("Necessário ter colunas categóricas e numéricas.")
+
+                    elif tipo_grafico == "Boxplot":
+                        if numeric_cols:
+                            selected_y = st.selectbox("Eixo Y (Numérico - Distribuição):", numeric_cols)
+                            selected_x = st.selectbox("Eixo X (Agrupamento - Opcional):", ["(Nenhum)"] + categorical_cols)
+                        else:
+                            st.warning("Não há colunas numéricas para boxplot.")
+
+                    elif tipo_grafico == "Gráfico de Pizza":
+                        if categorical_cols:
+                            selected_x = st.selectbox("Categoria (Rótulos):", categorical_cols)
+                            # Para pizza, geralmente contamos a ocorrência ou somamos um valor
+                            metodo_pizza = st.radio("Método:", ["Contagem de Registros", "Soma de Valor"])
+                            if metodo_pizza == "Soma de Valor" and numeric_cols:
+                                selected_y = st.selectbox("Valor a Somar:", numeric_cols)
+                            else:
+                                selected_y = None # Indica contagem
+                        else:
+                            st.warning("Necessário colunas categóricas.")
+
+                    elif tipo_grafico == "Gráfico de Dispersão (Scatter)":
+                        if len(numeric_cols) >= 2:
+                            selected_x = st.selectbox("Eixo X:", numeric_cols, index=0)
+                            selected_y = st.selectbox("Eixo Y:", numeric_cols, index=min(1, len(numeric_cols)-1))
+                            selected_color = st.selectbox("Legenda (Cor - Opcional):", ["(Nenhum)"] + categorical_cols)
+                        else:
+                            st.warning("Necessário pelo menos 2 colunas numéricas.")
+
+                    btn_gerar = st.button("Gerar Gráfico")
+
+                with col2:
+                    st.subheader("Visualização")
+                    if btn_gerar:
+                        try:
+                            fig, ax = plt.subplots(figsize=(10, 6))
+                            sns.set_palette("viridis")
+                            
+                            # Conversão do Hue ("Nenhum" -> None)
+                            hue_val = selected_color if selected_color != "(Nenhum)" else None
+                            
+                            # --- Plotagem ---
+                            if tipo_grafico == "Histograma" and selected_x:
+                                sns.histplot(data=df, x=selected_x, kde=True, bins=bins, hue=hue_val, ax=ax)
+                                ax.set_title(f"Histograma de {selected_x}")
+
+                            elif tipo_grafico == "Gráfico de Barras" and selected_x and selected_y:
+                                sns.barplot(data=df, x=selected_x, y=selected_y, hue=hue_val, ax=ax, errorbar=None)
+                                ax.set_title(f"Média de {selected_y} por {selected_x}")
+                                plt.xticks(rotation=45)
+
+                            elif tipo_grafico == "Boxplot" and selected_y:
+                                x_val = selected_x if selected_x != "(Nenhum)" else None
+                                sns.boxplot(data=df, x=x_val, y=selected_y, hue=hue_val, ax=ax)
+                                ax.set_title(f"Boxplot de {selected_y}")
+                                if x_val: plt.xticks(rotation=45)
+
+                            elif tipo_grafico == "Gráfico de Pizza" and selected_x:
+                                if selected_y: # Soma
+                                    data_pie = df.groupby(selected_x)[selected_y].sum()
+                                else: # Contagem
+                                    data_pie = df[selected_x].value_counts()
+                                
+                                ax.pie(data_pie, labels=data_pie.index, autopct='%1.1f%%', startangle=90)
+                                ax.axis('equal') # Garante que é um círculo
+                                ax.set_title(f"Distribuição de {selected_x}")
+
+                            elif tipo_grafico == "Gráfico de Dispersão (Scatter)" and selected_x and selected_y:
+                                sns.scatterplot(data=df, x=selected_x, y=selected_y, hue=hue_val, ax=ax)
+                                ax.set_title(f"Correlação: {selected_x} vs {selected_y}")
+
+                            st.pyplot(fig)
+                            
+                            # Botão de download da imagem (opcional)
+                            fn = f"grafico_{tipo_grafico.lower()}.png"
+                            img = BytesIO()
+                            plt.savefig(img, format='png')
+                            st.download_button(label="Baixar Imagem", data=img, file_name=fn, mime="image/png")
+                            
+                            plt.close(fig)
+
+                        except Exception as e:
+                            st.error(f"Erro ao gerar gráfico: {e}")
+                    else:
+                        st.info("Configure as opções à esquerda e clique em 'Gerar Gráfico'.")
 
             # --- ABA 3: ASSISTENTE COM IA (LANGCHAIN) ---
             with tab_ia:
