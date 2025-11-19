@@ -7,4 +7,3 @@ python-dotenv
 openpyxl
 langchain
 langchain-google-genai
-google-generative-ai
